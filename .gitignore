@@ -1,0 +1,4 @@
+# Direnv configuration.
+.envrc
+# Default direnv environment location.
+.direnv
