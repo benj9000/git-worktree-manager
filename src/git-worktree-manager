@@ -1,0 +1,270 @@
+#!/bin/sh
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+# git worktree manager – CLI.
+
+###############################################################################
+# Variables for configuration.
+###############################################################################
+
+PROJECTS_DIR="${GWM_PROJECTS_DIR?Projects directory must be set.}"
+WORKTREES_DIR="${GWM_WORKTREES_DIR?Worktrees directory must be set.}"
+
+INITIALIZATION_HOOK_FILENAME="init.sh"
+ACTIVATION_HOOK_FILENAME="activate.sh"
+
+###############################################################################
+# Helper functions.
+###############################################################################
+
+get_projects_dir() {
+    if [ -z "$PROJECTS_DIR" ]; then
+        exit_with_error "PROJECTS_DIR environment variable is not set."
+    fi
+
+    normalize_dir_path "$PROJECTS_DIR"
+}
+
+get_worktrees_dir() {
+    if [ -z "$WORKTREES_DIR" ]; then
+        exit_with_error "WORKTREES_DIR environment variable is not set."
+    fi
+
+    normalize_dir_path "$WORKTREES_DIR"
+}
+
+# normalize_dir_path PATH
+# Normalize a directory path by removing trailing slashes.
+normalize_dir_path() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "normalize_dir_path: Invalid number of arguments."
+    fi
+
+    path="$1"
+    normalized="${path%/}" # Remove trailing slashes.
+
+    # If the result is empty, the input was "/" or "//".
+    if [ -z "$normalized" ]; then
+        exit_with_error "normalize_dir_path: Normalization result is root path."
+    fi
+
+    printf "%s\n" "$normalized"
+}
+
+exit_with_usage() {
+    cat <<EOF
+git worktree manager – Manage Git worktrees.
+
+Usage: ${0##*/} <command> [args]
+
+The command's arguments will be passed via fzf.
+
+Commands:
+  init <branch>        Initialize a new worktree for the specified branch.
+  activate <worktree>  Activate the specified worktree.
+  remove <worktree>    Remove the specified worktree.
+  find <query>         Find a worktree and return its path.
+  prune                Prune worktree information.
+  list                 List all worktrees.
+EOF
+    exit 1
+}
+
+exit_with_error() {
+    message="$1"
+    code="${2:-1}"
+    printf "%s\n" "$message" >&2
+    exit "$code"
+}
+
+# Validate that the application is working inside a Git repository.
+validate_in_git_repository() {
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        exit_with_error "Not in a Git repository."
+    fi
+}
+
+# get_worktree_dir PROJECTS_DIR WORKTREES_DIR BRANCH_NAME
+# Get the path to the directory for the specified branch.
+get_worktree_dir() {
+    if [ "$#" -ne 3 ]; then
+        exit_with_error "get_worktree_dir: Invalid number of arguments."
+    fi
+
+    projects_dir="$1"
+    worktrees_dir="$2"
+    branch_name="$3"
+
+    repo_root="$(git rev-parse --show-toplevel)" || exit 1
+    if ! is_subdir "$projects_dir" "$repo_root"; then
+        exit_with_error "Repository not in project directory."
+    fi
+
+    # Get the repository directory path relative to the worktrees directory.
+    projects_dir_abs="$(abspath "$projects_dir")" || exit 1
+    repo_abs="$(abspath "$repo_root")" || exit 1
+    repo_rel="${repo_abs#"$projects_dir_abs"/}"
+
+    printf "%s\n" "${worktrees_dir}/$repo_rel/$branch_name"
+}
+
+# abspath PATH
+# Print the canonical absolute path to stdout, returns non-zero on failure.
+abspath() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "abspath: Invalid number of arguments."
+    fi
+
+    (cd "$1" 2>/dev/null && pwd) || return 1
+}
+
+# is_subdir BASE_PATH SUBDIR_CANDIDATE_PATH
+# Returns:
+#   0, if SUBDIR_CANDIDATE_PATH is BASE_PATH or is located under BASE_PATH.
+#   1, otherwise.
+is_subdir() {
+    if [ "$#" -ne 2 ]; then
+        exit_with_error "is_subdir: Invalid number of arguments."
+    fi
+
+    base=$1
+    child=$2
+
+    base_abs=$(abspath "$base") || return 1
+    child_abs=$(abspath "$child") || return 1
+
+    case $child_abs in
+        "$base_abs" | "$base_abs"/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# exec_hook WORKTREE_DIR EXECUTABLE_NAME
+# Execute the specified executable for the specified worktree directory.
+exec_hook() {
+    if [ "$#" -ne 2 ]; then
+        exit_with_error "exec_hook: Invalid number of arguments."
+    fi
+
+    worktree_dir="$1"
+    executable_name="$2"
+
+    # Only run hooks for worktrees inside the worktrees directory.
+    is_subdir "$WORKTREES_DIR" "$worktree_dir" || return 1
+
+    executable="$(dirname "$worktree_dir")/$executable_name"
+    if [ -f "$executable" ] && [ -x "$executable" ]; then
+        "$executable"
+    fi
+    return 0
+}
+
+###############################################################################
+# Commands.
+###############################################################################
+
+init_worktree() {
+    validate_in_git_repository
+    query="$*"
+    branch_name="$(
+        git branch --all --format="%(refname:short)" |
+            fzf --preview='git log --oneline -n10' --query "$query"
+    )"
+    projects_dir="$(get_projects_dir)" || exit 1
+    worktrees_dir="$(get_worktrees_dir)" || exit 1
+    get_worktree_dir "$projects_dir" "$worktrees_dir" "$branch_name"
+    if ! worktree_dir="$(
+        get_worktree_dir "$projects_dir" "$worktrees_dir" "$branch_name"
+    )"; then
+        exit_with_error "Failed to get worktree directory."
+    fi
+
+    mkdir -p "$worktree_dir"
+    if git worktree add "${worktree_dir}" "${branch_name}"; then
+        printf "%s\n" "Added worktree at ${worktree_dir}."
+        exec_hook "$worktree_dir" "$INITIALIZATION_HOOK_FILENAME"
+        printf "%s\n" "Initialized worktree at ${worktree_dir}."
+    else
+        exit_with_error "Failed to add worktree at ${worktree_dir}."
+    fi
+}
+
+activate_worktree() {
+    validate_in_git_repository
+    query="$*"
+    worktree_dir="$(
+        git worktree list |
+            fzf --preview='git log --oneline -n10 {2}' --query "$query" |
+            awk '{print $1}'
+    )"
+    exec_hook "$worktree_dir" "$ACTIVATION_HOOK_FILENAME"
+    printf "%s\n" "Activated worktree at ${worktree_dir}."
+}
+
+remove_worktree() {
+    validate_in_git_repository
+    query="$*"
+    worktree_dir="$(
+        git worktree list |
+            fzf --preview='git log --oneline -n10 {2}' --query "$query" |
+            awk '{print $1}'
+    )"
+
+    if git worktree remove "${worktree_dir}"; then
+        printf "%s\n" "Removed worktree at ${worktree_dir}."
+    else
+        exit_with_error "Failed to remove worktree at ${worktree_dir}."
+    fi
+}
+
+find_worktree() {
+    validate_in_git_repository
+    query="$*"
+    printf "%s\n" "$(
+        git worktree list |
+            fzf --preview='git log --oneline -n10 {2}' --query "$query" |
+            awk '{print $1}'
+    )"
+}
+
+prune_worktrees() {
+    validate_in_git_repository
+    if git worktree prune; then
+        printf "%s\n" "Pruned worktree information."
+    else
+        exit_with_error "Failed to prune worktree information."
+    fi
+}
+
+list_worktrees() {
+    validate_in_git_repository
+    git worktree list
+}
+
+###############################################################################
+# Entry point.
+###############################################################################
+
+main() {
+    if [ "$#" -eq 0 ]; then
+        exit_with_usage
+    fi
+
+    command="$1"
+    shift
+
+    case "$command" in
+        init) init_worktree "$@" ;;
+        activate) activate_worktree "$@" ;;
+        remove) remove_worktree "$@" ;;
+        find) find_worktree "$@" ;;
+        prune) prune_worktrees "$@" ;;
+        list) list_worktrees "$@" ;;
+        *) exit_with_usage ;;
+    esac
+}
+
+main "$@"
