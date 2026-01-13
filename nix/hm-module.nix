@@ -54,6 +54,7 @@ in
         '';
         shellAliases = {
           gwi = ''git-worktree-manager init "$@"'';
+          gwo = ''git-worktree-manager open "$@"'';
           gwa = ''git-worktree-manager activate "$@"'';
           gwrm = ''git-worktree-manager remove "$@"'';
           gwls = "git-worktree-manager list";
