@@ -55,20 +55,35 @@ normalize_dir_path() {
 }
 
 exit_with_usage() {
+    bin_name="${0##*/}"
     cat <<EOF
 git worktree manager – Manage Git worktrees.
 
-Usage: ${0##*/} <command> [args]
+Usage: $bin_name <command> [args]
 
-The command's arguments will be passed via fzf.
+COMMANDS
+  init <branch>          Initialize a new worktree for the specified branch,
+                         and trigger the "init" hook.
+  activate <worktree>    "Activate the specified worktree", i.e., trigger the
+                         "activate" hook.
+  remove <worktree>      Remove the specified worktree.
+  find <query>           Find a worktree and return its path.
+  prune                  Prune worktree information.
+  list                   List all worktrees.
 
-Commands:
-  init <branch>        Initialize a new worktree for the specified branch.
-  activate <worktree>  Activate the specified worktree.
-  remove <worktree>    Remove the specified worktree.
-  find <query>         Find a worktree and return its path.
-  prune                Prune worktree information.
-  list                 List all worktrees.
+Commands are interactive when possible, using fzf for selection.
+
+HOOKS
+  init        Runs when initializing a worktree ("$INITIALIZATION_HOOK_FILENAME").
+  activate    Runs when activating a worktree ("$ACTIVATION_HOOK_FILENAME").
+
+Hook files can be placed per repository in their repository-specific worktrees
+directory, and will be run, if present.
+
+EXAMPLES
+  $bin_name init feature/new-api
+  $bin_name activate
+  $bin_name find my-feature
 EOF
     exit 1
 }
