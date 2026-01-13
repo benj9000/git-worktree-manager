@@ -14,6 +14,7 @@ PROJECTS_DIR="${GWM_PROJECTS_DIR?Projects directory must be set.}"
 WORKTREES_DIR="${GWM_WORKTREES_DIR?Worktrees directory must be set.}"
 
 INITIALIZATION_HOOK_FILENAME="init.sh"
+OPEN_HOOK_FILENAME="open.sh"
 ACTIVATION_HOOK_FILENAME="activate.sh"
 
 ###############################################################################
@@ -64,6 +65,8 @@ Usage: $bin_name <command> [args]
 COMMANDS
   init <branch>          Initialize a new worktree for the specified branch,
                          and trigger the "init" hook.
+  open <worktree>        "Open the specified worktree", i.e., trigger the
+                         "open" hook.
   activate <worktree>    "Activate the specified worktree", i.e., trigger the
                          "activate" hook.
   remove <worktree>      Remove the specified worktree.
@@ -75,6 +78,7 @@ Commands are interactive when possible, using fzf for selection.
 
 HOOKS
   init        Runs when initializing a worktree ("$INITIALIZATION_HOOK_FILENAME").
+  open        Runs when opening a worktree ("$OPEN_HOOK_FILENAME").
   activate    Runs when activating a worktree ("$ACTIVATION_HOOK_FILENAME").
 
 Hook files can be placed per repository in their repository-specific worktrees
@@ -82,6 +86,7 @@ directory, and will be run, if present.
 
 EXAMPLES
   $bin_name init feature/new-api
+  $bin_name open
   $bin_name activate
   $bin_name find my-feature
 EOF
@@ -207,6 +212,18 @@ init_worktree() {
     fi
 }
 
+open_worktree() {
+    validate_in_git_repository
+    query="$*"
+    worktree_dir="$(
+        git worktree list |
+            fzf --preview='git log --oneline -n10 {2}' --query "$query" |
+            awk '{print $1}'
+    )"
+    exec_hook "$worktree_dir" "$OPEN_HOOK_FILENAME"
+    printf "%s\n" "Opened worktree at ${worktree_dir}."
+}
+
 activate_worktree() {
     validate_in_git_repository
     query="$*"
@@ -273,6 +290,7 @@ main() {
 
     case "$command" in
         init) init_worktree "$@" ;;
+        open) open_worktree "$@" ;;
         activate) activate_worktree "$@" ;;
         remove) remove_worktree "$@" ;;
         find) find_worktree "$@" ;;
