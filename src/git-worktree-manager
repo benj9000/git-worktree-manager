@@ -128,21 +128,32 @@ get_worktree_dir() {
     repo_abs="$(abspath "$repo_root")" || exit 1
     repo_rel="${repo_abs#"$projects_dir_abs"/}"
 
-    sanitized_branch="$(sanitize_branch_name "$branch_name")"
+    dir_name="$(branch_name_to_dir_name "$branch_name")"
 
-    printf "%s\n" "${worktrees_dir}/$repo_rel/$sanitized_branch"
+    printf "%s\n" "${worktrees_dir}/$repo_rel/$dir_name"
 }
 
-# sanitize_branch_name BRANCH_NAME
-# Replace slashes in branch names to avoid nested directories.
-sanitize_branch_name() {
+# branch_name_to_dir_name BRANCH_NAME
+branch_name_to_dir_name() {
     if [ "$#" -ne 1 ]; then
-        exit_with_error "sanitize_branch_name: Invalid number of arguments."
+        exit_with_error "branch_name_to_dir_name: Invalid number of arguments."
     fi
 
     branch_name="$1"
-    # Replace all slashes with underscores.
-    printf "%s\n" "$branch_name" | tr '/' '_'
+    stripped="$branch_name"
+
+    # Get list of remotes and check if branch name starts with any of them.
+    for remote in $(git remote); do
+        case "$branch_name" in
+            "$remote"/*)
+                stripped="${branch_name#"$remote"/}"
+                break
+                ;;
+        esac
+    done
+
+    # Replace all slashes with underscores to prevent a nested directory.
+    printf "%s\n" "$stripped" | tr '/' '_'
 }
 
 # abspath PATH
