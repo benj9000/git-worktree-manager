@@ -128,7 +128,21 @@ get_worktree_dir() {
     repo_abs="$(abspath "$repo_root")" || exit 1
     repo_rel="${repo_abs#"$projects_dir_abs"/}"
 
-    printf "%s\n" "${worktrees_dir}/$repo_rel/$branch_name"
+    sanitized_branch="$(sanitize_branch_name "$branch_name")"
+
+    printf "%s\n" "${worktrees_dir}/$repo_rel/$sanitized_branch"
+}
+
+# sanitize_branch_name BRANCH_NAME
+# Replace slashes in branch names to avoid nested directories.
+sanitize_branch_name() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "sanitize_branch_name: Invalid number of arguments."
+    fi
+
+    branch_name="$1"
+    # Replace all slashes with underscores.
+    printf "%s\n" "$branch_name" | tr '/' '_'
 }
 
 # abspath PATH
