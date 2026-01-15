@@ -177,7 +177,7 @@ exec_hook() {
 
     executable="$(dirname "$worktree_dir")/$executable_name"
     if [ -f "$executable" ] && [ -x "$executable" ]; then
-        "$executable"
+        "$executable" "$worktree_dir"
     fi
     return 0
 }
