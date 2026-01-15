@@ -221,7 +221,6 @@ init_worktree() {
     )"
     projects_dir="$(get_projects_dir)" || exit 1
     worktrees_dir="$(get_worktrees_dir)" || exit 1
-    get_worktree_dir "$projects_dir" "$worktrees_dir" "$branch_name"
     if ! worktree_dir="$(
         get_worktree_dir "$projects_dir" "$worktrees_dir" "$branch_name"
     )"; then
