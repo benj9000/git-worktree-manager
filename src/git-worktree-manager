@@ -162,15 +162,15 @@ is_subdir() {
     esac
 }
 
-# exec_hook WORKTREE_DIR EXECUTABLE_NAME
-# Execute the specified executable for the specified worktree directory.
+# exec_hook EXECUTABLE_NAME WORKTREE_DIR
+# Execute the specified executable with the specified worktree directory.
 exec_hook() {
     if [ "$#" -ne 2 ]; then
         exit_with_error "exec_hook: Invalid number of arguments."
     fi
 
-    worktree_dir="$1"
-    executable_name="$2"
+    executable_name="$1"
+    worktree_dir="$2"
 
     # Only run hooks for worktrees inside the worktrees directory.
     is_subdir "$WORKTREES_DIR" "$worktree_dir" || return 1
@@ -179,6 +179,7 @@ exec_hook() {
     if [ -f "$executable" ] && [ -x "$executable" ]; then
         "$executable" "$worktree_dir"
     fi
+
     return 0
 }
 
@@ -205,7 +206,7 @@ init_worktree() {
     mkdir -p "$worktree_dir"
     if git worktree add "${worktree_dir}" "${branch_name}"; then
         printf "%s\n" "Added worktree at ${worktree_dir}."
-        exec_hook "$worktree_dir" "$INITIALIZATION_HOOK_FILENAME"
+        exec_hook "$INITIALIZATION_HOOK_FILENAME" "$worktree_dir"
         printf "%s\n" "Initialized worktree at ${worktree_dir}."
     else
         exit_with_error "Failed to add worktree at ${worktree_dir}."
@@ -220,7 +221,7 @@ open_worktree() {
             fzf --preview='git log --oneline -n10 {2}' --query "$query" |
             awk '{print $1}'
     )"
-    exec_hook "$worktree_dir" "$OPEN_HOOK_FILENAME"
+    exec_hook "$OPEN_HOOK_FILENAME" "$worktree_dir"
     printf "%s\n" "Opened worktree at ${worktree_dir}."
 }
 
@@ -232,7 +233,7 @@ activate_worktree() {
             fzf --preview='git log --oneline -n10 {2}' --query "$query" |
             awk '{print $1}'
     )"
-    exec_hook "$worktree_dir" "$ACTIVATION_HOOK_FILENAME"
+    exec_hook "$ACTIVATION_HOOK_FILENAME" "$worktree_dir"
     printf "%s\n" "Activated worktree at ${worktree_dir}."
 }
 
