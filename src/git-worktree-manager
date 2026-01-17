@@ -240,8 +240,6 @@ init_worktree() {
         exit_with_error "Failed to get worktree directory."
     fi
 
-    mkdir -p "$worktree_dir"
-
     # If remote branch selected, create local tracking branch. Otherwise use branch directly
     if [ "$local_branch_name" != "$branch_name" ]; then
         if ! git worktree add -b "$local_branch_name" "$worktree_dir" "$branch_name"; then
