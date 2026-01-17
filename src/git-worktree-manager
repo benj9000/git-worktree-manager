@@ -133,6 +133,28 @@ get_worktree_dir() {
     printf "%s\n" "${worktrees_dir}/$repo_rel/$dir_name"
 }
 
+# get_local_branch_name BRANCH_NAME
+# Extract local branch name from a branch reference (strips remote prefix if present).
+get_local_branch_name() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "get_local_branch_name: Invalid number of arguments."
+    fi
+
+    branch_name="$1"
+    local_branch="$branch_name"
+
+    for remote in $(git remote); do
+        case "$branch_name" in
+            "$remote"/*)
+                local_branch="${branch_name#"$remote"/}"
+                break
+                ;;
+        esac
+    done
+
+    printf "%s\n" "$local_branch"
+}
+
 # branch_name_to_dir_name BRANCH_NAME
 branch_name_to_dir_name() {
     if [ "$#" -ne 1 ]; then
@@ -140,20 +162,8 @@ branch_name_to_dir_name() {
     fi
 
     branch_name="$1"
-    stripped="$branch_name"
-
-    # Get list of remotes and check if branch name starts with any of them.
-    for remote in $(git remote); do
-        case "$branch_name" in
-            "$remote"/*)
-                stripped="${branch_name#"$remote"/}"
-                break
-                ;;
-        esac
-    done
-
     # Replace all slashes with underscores to prevent a nested directory.
-    printf "%s\n" "$stripped" | tr '/' '_'
+    printf "%s\n" "$branch_name" | tr '/' '_'
 }
 
 # abspath PATH
@@ -219,22 +229,33 @@ init_worktree() {
         git branch --all --format="%(refname:short)" |
             fzf --preview='git log --oneline -n10' --query "$query"
     )"
+
+    local_branch_name="$(get_local_branch_name "$branch_name")"
+
     projects_dir="$(get_projects_dir)" || exit 1
     worktrees_dir="$(get_worktrees_dir)" || exit 1
     if ! worktree_dir="$(
-        get_worktree_dir "$projects_dir" "$worktrees_dir" "$branch_name"
+        get_worktree_dir "$projects_dir" "$worktrees_dir" "$local_branch_name"
     )"; then
         exit_with_error "Failed to get worktree directory."
     fi
 
     mkdir -p "$worktree_dir"
-    if git worktree add "${worktree_dir}" "${branch_name}"; then
-        printf "%s\n" "Added worktree at ${worktree_dir}."
-        exec_hook "$INITIALIZATION_HOOK_FILENAME" "$worktree_dir"
-        printf "%s\n" "Initialized worktree at ${worktree_dir}."
+
+    # If remote branch selected, create local tracking branch. Otherwise use branch directly
+    if [ "$local_branch_name" != "$branch_name" ]; then
+        if ! git worktree add -b "$local_branch_name" "$worktree_dir" "$branch_name"; then
+            exit_with_error "Failed to add worktree at $worktree_dir."
+        fi
     else
-        exit_with_error "Failed to add worktree at ${worktree_dir}."
+        if ! git worktree add "$worktree_dir" "$branch_name"; then
+            exit_with_error "Failed to add worktree at $worktree_dir."
+        fi
     fi
+    printf "%s\n" "Added worktree at $worktree_dir."
+
+    exec_hook "$INITIALIZATION_HOOK_FILENAME" "$worktree_dir"
+    printf "%s\n" "Initialized worktree at $worktree_dir."
 }
 
 open_worktree() {
