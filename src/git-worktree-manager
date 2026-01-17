@@ -56,6 +56,7 @@ normalize_dir_path() {
 }
 
 exit_with_usage() {
+    code="${1:-1}"
     bin_name="${0##*/}"
     cat <<EOF
 git worktree manager – Manage Git worktrees.
@@ -73,6 +74,7 @@ COMMANDS
   find <query>           Find a worktree and return its path.
   prune                  Prune worktree information.
   list                   List all worktrees.
+  help                   Show this information.
 
 Commands are interactive when possible, using fzf for selection.
 
@@ -340,6 +342,7 @@ main() {
         find) find_worktree "$@" ;;
         prune) prune_worktrees "$@" ;;
         list) list_worktrees "$@" ;;
+        help | --help | -h) exit_with_usage 0 ;;
         *) exit_with_usage ;;
     esac
 }
