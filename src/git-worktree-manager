@@ -107,7 +107,7 @@ get_worktree_dir() {
 
     dir_name="$(branch_name_to_dir_name "$branch_name")"
 
-    printf "%s\n" "${worktrees_dir}/$repo_rel/$dir_name"
+    printf "%s\n" "$worktrees_dir/$repo_rel/$dir_name"
 }
 
 # get_local_branch_name BRANCH_NAME
@@ -267,7 +267,7 @@ open_worktree() {
             awk '{print $1}'
     )"
     exec_hook "$OPEN_HOOK_FILENAME" "$worktree_dir"
-    printf "%s\n" "Opened worktree at ${worktree_dir}."
+    printf "%s\n" "Opened worktree at $worktree_dir."
 }
 
 activate_worktree() {
@@ -279,7 +279,7 @@ activate_worktree() {
             awk '{print $1}'
     )"
     exec_hook "$ACTIVATION_HOOK_FILENAME" "$worktree_dir"
-    printf "%s\n" "Activated worktree at ${worktree_dir}."
+    printf "%s\n" "Activated worktree at $worktree_dir."
 }
 
 remove_worktree() {
@@ -292,9 +292,9 @@ remove_worktree() {
     )"
 
     if git worktree remove "${worktree_dir}"; then
-        printf "%s\n" "Removed worktree at ${worktree_dir}."
+        printf "%s\n" "Removed worktree at $worktree_dir."
     else
-        exit_with_error "Failed to remove worktree at ${worktree_dir}."
+        exit_with_error "Failed to remove worktree at $worktree_dir."
     fi
 }
 
