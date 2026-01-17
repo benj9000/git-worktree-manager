@@ -21,40 +21,6 @@ ACTIVATION_HOOK_FILENAME="activate.sh"
 # Helper functions.
 ###############################################################################
 
-get_projects_dir() {
-    if [ -z "$PROJECTS_DIR" ]; then
-        exit_with_error "PROJECTS_DIR environment variable is not set."
-    fi
-
-    normalize_dir_path "$PROJECTS_DIR"
-}
-
-get_worktrees_dir() {
-    if [ -z "$WORKTREES_DIR" ]; then
-        exit_with_error "WORKTREES_DIR environment variable is not set."
-    fi
-
-    normalize_dir_path "$WORKTREES_DIR"
-}
-
-# normalize_dir_path PATH
-# Normalize a directory path by removing trailing slashes.
-normalize_dir_path() {
-    if [ "$#" -ne 1 ]; then
-        exit_with_error "normalize_dir_path: Invalid number of arguments."
-    fi
-
-    path="$1"
-    normalized="${path%/}" # Remove trailing slashes.
-
-    # If the result is empty, the input was "/" or "//".
-    if [ -z "$normalized" ]; then
-        exit_with_error "normalize_dir_path: Normalization result is root path."
-    fi
-
-    printf "%s\n" "$normalized"
-}
-
 exit_with_usage() {
     code="${1:-1}"
     bin_name="${0##*/}"
@@ -102,11 +68,20 @@ exit_with_error() {
     exit "$code"
 }
 
-# Validate that the application is working inside a Git repository.
-validate_in_git_repository() {
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        exit_with_error "Not in a Git repository."
+get_projects_dir() {
+    if [ -z "$PROJECTS_DIR" ]; then
+        exit_with_error "PROJECTS_DIR environment variable is not set."
     fi
+
+    normalize_dir_path "$PROJECTS_DIR"
+}
+
+get_worktrees_dir() {
+    if [ -z "$WORKTREES_DIR" ]; then
+        exit_with_error "WORKTREES_DIR environment variable is not set."
+    fi
+
+    normalize_dir_path "$WORKTREES_DIR"
 }
 
 # get_worktree_dir PROJECTS_DIR WORKTREES_DIR BRANCH_NAME
@@ -197,6 +172,31 @@ is_subdir() {
         "$base_abs" | "$base_abs"/*) return 0 ;;
         *) return 1 ;;
     esac
+}
+
+# normalize_dir_path PATH
+# Normalize a directory path by removing trailing slashes.
+normalize_dir_path() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "normalize_dir_path: Invalid number of arguments."
+    fi
+
+    path="$1"
+    normalized="${path%/}" # Remove trailing slashes.
+
+    # If the result is empty, the input was "/" or "//".
+    if [ -z "$normalized" ]; then
+        exit_with_error "normalize_dir_path: Normalization result is root path."
+    fi
+
+    printf "%s\n" "$normalized"
+}
+#
+# Validate that the application is working inside a Git repository.
+validate_in_git_repository() {
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        exit_with_error "Not in a Git repository."
+    fi
 }
 
 # exec_hook EXECUTABLE_NAME WORKTREE_DIR
