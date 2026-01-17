@@ -143,8 +143,8 @@ branch_name_to_dir_name() {
     printf "%s\n" "$branch_name" | tr '/' '_'
 }
 
-# abspath PATH
-# Print the canonical absolute path to stdout, returns non-zero on failure.
+# abspath DIR_PATH
+# Print the canonical absolute path of the directory to stdout, returns non-zero on failure.
 abspath() {
     if [ "$#" -ne 1 ]; then
         exit_with_error "abspath: Invalid number of arguments."
