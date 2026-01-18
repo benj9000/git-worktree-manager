@@ -33,7 +33,7 @@ in
       let
         wrapped = pkgs.writeShellApplication {
           name = "git-worktree-manager";
-          runtimeInputs = [ flake.packages.${pkgs.system}.default ];
+          runtimeInputs = [ flake.packages.${pkgs.stdenv.hostPlatform.system}.default ];
           runtimeEnv = {
             GWM_PROJECTS_DIR = cfg.settings.projectsDirectory;
             GWM_WORKTREES_DIR = cfg.settings.worktreesDirectory;
