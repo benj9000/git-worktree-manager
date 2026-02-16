@@ -95,15 +95,17 @@ get_worktree_dir() {
     worktrees_dir="$2"
     branch_name="$3"
 
-    repo_root="$(git rev-parse --show-toplevel)" || exit 1
-    if ! is_subdir "$projects_dir" "$repo_root"; then
+    projects_dir_abs="$(abspath "$projects_dir")" || exit 1
+
+    # Get the path to the main (non-worktree) repository of the worktree.
+    git_common_dir="$(git rev-parse --git-common-dir)" || exit 1
+    repo_root_abs="$(abspath "$git_common_dir/..")" || exit 1
+    if ! is_subdir "$projects_dir_abs" "$repo_root_abs"; then
         exit_with_error "Repository not in project directory."
     fi
 
-    # Get the repository directory path relative to the worktrees directory.
-    projects_dir_abs="$(abspath "$projects_dir")" || exit 1
-    repo_abs="$(abspath "$repo_root")" || exit 1
-    repo_rel="${repo_abs#"$projects_dir_abs"/}"
+    # Get the repository directory path relative to the projects directory.
+    repo_rel="${repo_root_abs#"$projects_dir_abs"/}"
 
     dir_name="$(branch_name_to_dir_name "$branch_name")"
 
