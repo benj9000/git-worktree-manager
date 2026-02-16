@@ -223,11 +223,10 @@ exec_hook() {
 }
 
 ###############################################################################
-# Commands.
+# Command operations.
 ###############################################################################
 
 init_worktree() {
-    validate_in_git_repository
     query="$*"
     branch_name="$(
         git branch --all --format="%(refname:short)" |
@@ -261,7 +260,6 @@ init_worktree() {
 }
 
 open_worktree() {
-    validate_in_git_repository
     query="$*"
     worktree_dir="$(
         git worktree list |
@@ -273,7 +271,6 @@ open_worktree() {
 }
 
 activate_worktree() {
-    validate_in_git_repository
     query="$*"
     worktree_dir="$(
         git worktree list |
@@ -285,7 +282,6 @@ activate_worktree() {
 }
 
 remove_worktree() {
-    validate_in_git_repository
     query="$*"
     worktree_dir="$(
         git worktree list |
@@ -301,7 +297,6 @@ remove_worktree() {
 }
 
 find_worktree() {
-    validate_in_git_repository
     query="$*"
     printf "%s\n" "$(
         git worktree list |
@@ -311,7 +306,6 @@ find_worktree() {
 }
 
 prune_worktrees() {
-    validate_in_git_repository
     if git worktree prune; then
         printf "%s\n" "Pruned worktree information."
     else
@@ -320,7 +314,6 @@ prune_worktrees() {
 }
 
 list_worktrees() {
-    validate_in_git_repository
     git worktree list
 }
 
@@ -330,23 +323,33 @@ list_worktrees() {
 
 main() {
     if [ "$#" -eq 0 ]; then
-        exit_with_usage
+        exit_with_usage 0
     fi
 
     command="$1"
     shift
 
+    # Route command to operation.
     case "$command" in
-        init) init_worktree "$@" ;;
-        open) open_worktree "$@" ;;
-        activate) activate_worktree "$@" ;;
-        remove) remove_worktree "$@" ;;
-        find) find_worktree "$@" ;;
-        prune) prune_worktrees "$@" ;;
-        list) list_worktrees "$@" ;;
-        help | --help | -h) exit_with_usage 0 ;;
-        *) exit_with_usage ;;
+        init | open | activate | remove | find)
+            operation="${command}_worktree"
+            ;;
+        prune | list)
+            operation="${command}_worktrees"
+            ;;
+        help | --help | -h)
+            exit_with_usage 0
+            ;;
+        *)
+            exit_with_usage 1
+            ;;
     esac
+
+    # At this point, we have a valid command/operation. Validate context.
+    validate_in_git_repository
+
+    # Execute the operation.
+    "$operation" "$@"
 }
 
 main "$@"
