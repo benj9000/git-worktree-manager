@@ -164,13 +164,13 @@ is_subdir() {
         exit_with_error "is_subdir: Invalid number of arguments."
     fi
 
-    base=$1
-    child=$2
+    base="$1"
+    child="$2"
 
     base_abs=$(abspath "$base") || return 1
     child_abs=$(abspath "$child") || return 1
 
-    case $child_abs in
+    case "$child_abs" in
         "$base_abs"/*) return 0 ;; # Strict sub directory only.
         *) return 1 ;;
     esac
