@@ -157,7 +157,7 @@ abspath() {
 
 # is_subdir BASE_PATH SUBDIR_CANDIDATE_PATH
 # Returns:
-#   0, if SUBDIR_CANDIDATE_PATH is BASE_PATH or is located under BASE_PATH.
+#   0, if SUBDIR_CANDIDATE_PATH is a subdirectory of BASE_PATH.
 #   1, otherwise.
 is_subdir() {
     if [ "$#" -ne 2 ]; then
@@ -171,7 +171,7 @@ is_subdir() {
     child_abs=$(abspath "$child") || return 1
 
     case $child_abs in
-        "$base_abs" | "$base_abs"/*) return 0 ;;
+        "$base_abs"/*) return 0 ;; # Strict sub directory only.
         *) return 1 ;;
     esac
 }
