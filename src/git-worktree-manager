@@ -58,7 +58,7 @@ EXAMPLES
   $bin_name activate
   $bin_name find my-feature
 EOF
-    exit 1
+    exit "$code"
 }
 
 exit_with_error() {
