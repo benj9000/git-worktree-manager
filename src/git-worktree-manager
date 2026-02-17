@@ -307,6 +307,15 @@ list_worktrees() {
     git worktree list
 }
 
+debug() {
+    printf "GWM_PROJECTS_DIR=%s\n" "${GWM_PROJECTS_DIR:-""}"
+    printf "GWM_WORKTREES_DIR=%s\n" "${GWM_WORKTREES_DIR:-""}"
+    printf "PROJECTS_DIR_ABS=%s\n" "${PROJECTS_DIR_ABS:-""}"
+    printf "WORKTREES_DIR_ABS=%s\n" "${WORKTREES_DIR_ABS:-""}"
+    printf "REPO_ROOT_ABS=%s\n" "${REPO_ROOT_ABS:-""}"
+    printf "REPO_REL=%s\n" "${REPO_REL:-""}"
+}
+
 ###############################################################################
 # Entry point.
 ###############################################################################
