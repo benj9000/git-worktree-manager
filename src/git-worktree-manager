@@ -48,7 +48,14 @@ init_git_context() {
     REPO_REL="${REPO_ROOT_ABS#"$PROJECTS_DIR_ABS"/}"
 }
 
+# Check whether the required dependencies are available.
+check_dependencies() {
+    require_command git
+    require_command fzf
+}
+
 init_context() {
+    check_dependencies
     init_location_configuration
     init_git_context
 }
@@ -103,7 +110,19 @@ exit_with_error() {
     printf "%s\n" "$message" >&2
     exit "$code"
 }
-#
+
+# require_command COMMAND
+# Check whether the specified command is available, exits if not.
+require_command() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "require_command: Invalid number of arguments."
+    fi
+
+    if ! command -v "$1" >/dev/null 2>&1; then
+        exit_with_error "Required command not found: $1"
+    fi
+}
+
 # abspath DIR_PATH
 # Print the canonical absolute path of the directory to stdout, returns non-zero on failure.
 abspath() {
