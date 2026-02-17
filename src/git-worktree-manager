@@ -7,15 +7,51 @@ set -o pipefail
 # git worktree manager – CLI.
 
 ###############################################################################
-# Variables for configuration.
+# Context and configuration.
 ###############################################################################
 
-PROJECTS_DIR="${GWM_PROJECTS_DIR?Projects directory must be set.}"
-WORKTREES_DIR="${GWM_WORKTREES_DIR?Worktrees directory must be set.}"
-
+# Filenames for hooks.
 INITIALIZATION_HOOK_FILENAME="init.sh"
 OPEN_HOOK_FILENAME="open.sh"
 ACTIVATION_HOOK_FILENAME="activate.sh"
+
+# Initialize the locations required for the main operations of this application based on the
+# configuration.
+init_location_configuration() {
+    # Initialize the location, where the projects live.
+    projects_dir="${GWM_PROJECTS_DIR?Projects directory must be set.}"
+    PROJECTS_DIR_ABS="$(abspath "$projects_dir")" ||
+        exit_with_error "Invalid GWM_PROJECTS_DIR"
+
+    # Initialize the location, where the worktrees live.
+    worktrees_dir="${GWM_WORKTREES_DIR?Worktrees directory must be set.}"
+    WORKTREES_DIR_ABS="$(abspath "$worktrees_dir")" ||
+        exit_with_error "Invalid GWM_WORKTREES_DIR."
+}
+
+# Initialize the Git context of the current working directory.
+init_git_context() {
+    # Initialize the location of the root of the Git repository based on the current working
+    # directory (the main repository, not a worktree).
+    git_common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" ||
+        exit_with_error "Not in a Git repository."
+    REPO_ROOT_ABS="$(abspath "$git_common_dir/..")" ||
+        exit_with_error "Cannot resolve repository root."
+
+    # Layout validation: repository root must be a strict subdirectory of the projects directory.
+    case "$REPO_ROOT_ABS" in
+        "$PROJECTS_DIR_ABS"/*) ;;
+        *) exit_with_error "Repository not inside projects directory." ;;
+    esac
+
+    # Initialize the relative path of the repository to the projects directory.
+    REPO_REL="${REPO_ROOT_ABS#"$PROJECTS_DIR_ABS"/}"
+}
+
+init_context() {
+    init_location_configuration
+    init_git_context
+}
 
 ###############################################################################
 # Helper functions.
@@ -67,53 +103,80 @@ exit_with_error() {
     printf "%s\n" "$message" >&2
     exit "$code"
 }
-
-get_projects_dir() {
-    if [ -z "$PROJECTS_DIR" ]; then
-        exit_with_error "PROJECTS_DIR environment variable is not set."
+#
+# abspath DIR_PATH
+# Print the canonical absolute path of the directory to stdout, returns non-zero on failure.
+abspath() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "abspath: Invalid number of arguments."
     fi
 
-    normalize_dir_path "$PROJECTS_DIR"
+    (cd "$1" 2>/dev/null && pwd) || return 1
+}
+#
+# normalize_dir_path PATH
+# Normalize a directory path by removing trailing slashes.
+normalize_dir_path() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "normalize_dir_path: Invalid number of arguments."
+    fi
+
+    path="$1"
+    normalized="${path%/}" # Remove trailing slashes.
+
+    # If the result is empty, the input was "/" or "//".
+    if [ -z "$normalized" ]; then
+        exit_with_error "normalize_dir_path: Normalization result is root path."
+    fi
+
+    printf "%s\n" "$normalized"
 }
 
-get_worktrees_dir() {
-    if [ -z "$WORKTREES_DIR" ]; then
-        exit_with_error "WORKTREES_DIR environment variable is not set."
+# is_subdir_abs BASE_PATH_ABS SUBDIR_CANDIDATE_PATH_ABS
+# Determine whether a the candidate is a strict subdirectory of the base directory. Expects absolute
+# paths.
+# Returns:
+#   0, if SUBDIR_CANDIDATE_PATH_ABS is a subdirectory of BASE_PATH_ABS,
+#   1, otherwise.
+is_subdir_abs() {
+    if [ "$#" -ne 2 ]; then
+        exit_with_error "is_subdir_abs: Invalid number of arguments."
     fi
 
-    normalize_dir_path "$WORKTREES_DIR"
+    base="$1"
+    child="$2"
+    case "$child" in
+        "$base"/*) return 0 ;; # Strict sub directory only.
+        *) return 1 ;;
+    esac
 }
 
-# get_worktree_dir PROJECTS_DIR WORKTREES_DIR BRANCH_NAME
-# Get the path to the directory for the specified branch.
-get_worktree_dir() {
-    if [ "$#" -ne 3 ]; then
-        exit_with_error "get_worktree_dir: Invalid number of arguments."
+# get_worktree_dir_abs BRANCH_NAME
+# Get the absolute path to the worktree directory for the specified branch.
+get_worktree_dir_abs() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "get_worktree_dir_abs: Invalid number of arguments."
     fi
 
-    projects_dir="$1"
-    worktrees_dir="$2"
-    branch_name="$3"
-
-    projects_dir_abs="$(abspath "$projects_dir")" || exit 1
-
-    # Get the path to the main (non-worktree) repository of the worktree.
-    git_common_dir="$(git rev-parse --git-common-dir)" || exit 1
-    repo_root_abs="$(abspath "$git_common_dir/..")" || exit 1
-    if ! is_subdir "$projects_dir_abs" "$repo_root_abs"; then
-        exit_with_error "Repository not in project directory."
-    fi
-
-    # Get the repository directory path relative to the projects directory.
-    repo_rel="${repo_root_abs#"$projects_dir_abs"/}"
-
+    branch_name="$1"
     dir_name="$(branch_name_to_dir_name "$branch_name")"
+    printf "%s\n" "$WORKTREES_DIR_ABS/$REPO_REL/$dir_name"
+}
 
-    printf "%s\n" "$worktrees_dir/$repo_rel/$dir_name"
+# branch_name_to_dir_name BRANCH_NAME
+# Get the normalized directory name for the specified branch.
+branch_name_to_dir_name() {
+    if [ "$#" -ne 1 ]; then
+        exit_with_error "branch_name_to_dir_name: Invalid number of arguments."
+    fi
+
+    branch_name="$1"
+    # Replace all slashes with underscores to prevent a nested directory.
+    printf "%s\n" "$branch_name" | tr '/' '_'
 }
 
 # get_local_branch_name BRANCH_NAME
-# Extract local branch name from a branch reference (strips remote prefix if present).
+# Extract the local branch name from a branch reference (strips remote prefix if present).
 get_local_branch_name() {
     if [ "$#" -ne 1 ]; then
         exit_with_error "get_local_branch_name: Invalid number of arguments."
@@ -134,74 +197,7 @@ get_local_branch_name() {
     printf "%s\n" "$local_branch"
 }
 
-# branch_name_to_dir_name BRANCH_NAME
-branch_name_to_dir_name() {
-    if [ "$#" -ne 1 ]; then
-        exit_with_error "branch_name_to_dir_name: Invalid number of arguments."
-    fi
-
-    branch_name="$1"
-    # Replace all slashes with underscores to prevent a nested directory.
-    printf "%s\n" "$branch_name" | tr '/' '_'
-}
-
-# abspath DIR_PATH
-# Print the canonical absolute path of the directory to stdout, returns non-zero on failure.
-abspath() {
-    if [ "$#" -ne 1 ]; then
-        exit_with_error "abspath: Invalid number of arguments."
-    fi
-
-    (cd "$1" 2>/dev/null && pwd) || return 1
-}
-
-# is_subdir BASE_PATH SUBDIR_CANDIDATE_PATH
-# Returns:
-#   0, if SUBDIR_CANDIDATE_PATH is a subdirectory of BASE_PATH.
-#   1, otherwise.
-is_subdir() {
-    if [ "$#" -ne 2 ]; then
-        exit_with_error "is_subdir: Invalid number of arguments."
-    fi
-
-    base="$1"
-    child="$2"
-
-    base_abs=$(abspath "$base") || return 1
-    child_abs=$(abspath "$child") || return 1
-
-    case "$child_abs" in
-        "$base_abs"/*) return 0 ;; # Strict sub directory only.
-        *) return 1 ;;
-    esac
-}
-
-# normalize_dir_path PATH
-# Normalize a directory path by removing trailing slashes.
-normalize_dir_path() {
-    if [ "$#" -ne 1 ]; then
-        exit_with_error "normalize_dir_path: Invalid number of arguments."
-    fi
-
-    path="$1"
-    normalized="${path%/}" # Remove trailing slashes.
-
-    # If the result is empty, the input was "/" or "//".
-    if [ -z "$normalized" ]; then
-        exit_with_error "normalize_dir_path: Normalization result is root path."
-    fi
-
-    printf "%s\n" "$normalized"
-}
-#
-# Validate that the application is working inside a Git repository.
-validate_in_git_repository() {
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        exit_with_error "Not in a Git repository."
-    fi
-}
-
-# exec_hook EXECUTABLE_NAME WORKTREE_DIR
+# exec_hook EXECUTABLE_NAME WORKTREE_DIR_ABS
 # Execute the specified executable with the specified worktree directory.
 exec_hook() {
     if [ "$#" -ne 2 ]; then
@@ -212,7 +208,7 @@ exec_hook() {
     worktree_dir="$2"
 
     # Only run hooks for worktrees inside the worktrees directory.
-    is_subdir "$WORKTREES_DIR" "$worktree_dir" || return 1
+    is_subdir_abs "$WORKTREES_DIR_ABS" "$worktree_dir" || return 1
 
     executable="$(dirname "$worktree_dir")/$executable_name"
     if [ -f "$executable" ] && [ -x "$executable" ]; then
@@ -235,50 +231,45 @@ init_worktree() {
 
     local_branch_name="$(get_local_branch_name "$branch_name")"
 
-    projects_dir="$(get_projects_dir)" || exit 1
-    worktrees_dir="$(get_worktrees_dir)" || exit 1
-    if ! worktree_dir="$(
-        get_worktree_dir "$projects_dir" "$worktrees_dir" "$local_branch_name"
-    )"; then
+    worktree_dir_abs="$(get_worktree_dir_abs "$local_branch_name")" ||
         exit_with_error "Failed to get worktree directory."
-    fi
 
     # If remote branch selected, create local tracking branch. Otherwise use branch directly
     if [ "$local_branch_name" != "$branch_name" ]; then
-        if ! git worktree add -b "$local_branch_name" "$worktree_dir" "$branch_name"; then
-            exit_with_error "Failed to add worktree at $worktree_dir."
+        if ! git worktree add -b "$local_branch_name" "$worktree_dir_abs" "$branch_name"; then
+            exit_with_error "Failed to add worktree at $worktree_dir_abs."
         fi
     else
-        if ! git worktree add "$worktree_dir" "$branch_name"; then
-            exit_with_error "Failed to add worktree at $worktree_dir."
+        if ! git worktree add "$worktree_dir_abs" "$branch_name"; then
+            exit_with_error "Failed to add worktree at $worktree_dir_abs."
         fi
     fi
-    printf "%s\n" "Added worktree at $worktree_dir."
+    printf "%s\n" "Added worktree at $worktree_dir_abs."
 
-    exec_hook "$INITIALIZATION_HOOK_FILENAME" "$worktree_dir"
-    printf "%s\n" "Initialized worktree at $worktree_dir."
+    exec_hook "$INITIALIZATION_HOOK_FILENAME" "$worktree_dir_abs"
+    printf "%s\n" "Initialized worktree at $worktree_dir_abs."
 }
 
 open_worktree() {
     query="$*"
-    worktree_dir="$(
+    worktree_dir_abs="$(
         git worktree list |
             fzf --preview='git log --oneline -n10 {2}' --query "$query" |
             awk '{print $1}'
     )"
-    exec_hook "$OPEN_HOOK_FILENAME" "$worktree_dir"
-    printf "%s\n" "Opened worktree at $worktree_dir."
+    exec_hook "$OPEN_HOOK_FILENAME" "$worktree_dir_abs"
+    printf "%s\n" "Opened worktree at $worktree_dir_abs."
 }
 
 activate_worktree() {
     query="$*"
-    worktree_dir="$(
+    worktree_dir_abs="$(
         git worktree list |
             fzf --preview='git log --oneline -n10 {2}' --query "$query" |
             awk '{print $1}'
     )"
-    exec_hook "$ACTIVATION_HOOK_FILENAME" "$worktree_dir"
-    printf "%s\n" "Activated worktree at $worktree_dir."
+    exec_hook "$ACTIVATION_HOOK_FILENAME" "$worktree_dir_abs"
+    printf "%s\n" "Activated worktree at $worktree_dir_abs."
 }
 
 remove_worktree() {
@@ -288,7 +279,6 @@ remove_worktree() {
             fzf --preview='git log --oneline -n10 {2}' --query "$query" |
             awk '{print $1}'
     )"
-
     if git worktree remove "${worktree_dir}"; then
         printf "%s\n" "Removed worktree at $worktree_dir."
     else
@@ -345,8 +335,8 @@ main() {
             ;;
     esac
 
-    # At this point, we have a valid command/operation. Validate context.
-    validate_in_git_repository
+    # At this point, we have a valid command/operation. Initialize context.
+    init_context
 
     # Execute the operation.
     "$operation" "$@"
